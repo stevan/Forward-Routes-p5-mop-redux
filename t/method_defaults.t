@@ -13,14 +13,14 @@ my $r = Forward::Routes->new;
 
 # set
 my $route = $r->add_route('articles')->defaults(first_name => 'foo', last_name => 'bar');
-is_deeply $route->{defaults}, {first_name => 'foo', last_name => 'bar'};
+is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar'};
 
 # get
 is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar'};
 
 # add
 $route->defaults(city => 'ny', country => 'us');
-is_deeply $route->{defaults}, {first_name => 'foo', last_name => 'bar', city => 'ny', country => 'us'};
+is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar', city => 'ny', country => 'us'};
 
 # get
 is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar', city => 'ny', country => 'us'};
@@ -41,9 +41,9 @@ is $route, $rv;
 $r = Forward::Routes->new;
 $route = $r->add_route('articles');
 $route->defaults;
-my $defaults1 = $route->{defaults};
+my $defaults1 = $route->defaults;
 $route->defaults(first_name => 'foo', last_name => 'bar');
-my $defaults2 = $route->{defaults};
+my $defaults2 = $route->defaults;
 is $defaults1, $defaults2;
 
 
@@ -54,14 +54,14 @@ $r = Forward::Routes->new;
 
 # set
 $route = $r->add_route('articles')->defaults({first_name => 'foo', last_name => 'bar'});
-is_deeply $route->{defaults}, {first_name => 'foo', last_name => 'bar'};
+is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar'};
 
 # get
 is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar'};
 
 # add
 $route->defaults({city => 'ny', country => 'us'});
-is_deeply $route->{defaults}, {first_name => 'foo', last_name => 'bar', city => 'ny', country => 'us'};
+is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar', city => 'ny', country => 'us'};
 
 # get
 is_deeply $route->defaults, {first_name => 'foo', last_name => 'bar', city => 'ny', country => 'us'};

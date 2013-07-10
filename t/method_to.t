@@ -13,7 +13,7 @@ my $r = Forward::Routes->new;
 
 # set
 my $route = $r->add_route('articles')->to('Hello#world');
-is_deeply $route->{defaults}, {controller => 'Hello', action => 'world'};
+is_deeply $route->defaults, {controller => 'Hello', action => 'world'};
 
 # no getter
 is $route->to, undef;
@@ -25,7 +25,7 @@ is $matches->[0]->action, 'world';
 
 # overwrite
 $route->to('Country#city');
-is_deeply $route->{defaults}, {controller => 'Country', action => 'city'};
+is_deeply $route->defaults, {controller => 'Country', action => 'city'};
 
 
 
@@ -43,8 +43,8 @@ is $route, $rv;
 
 $r = Forward::Routes->new;
 $route = $r->add_route('articles')->to('#world');
-is_deeply $route->{defaults}, {controller => undef, action => 'world'};
+is_deeply $route->defaults, {controller => undef, action => 'world'};
 
 $r = Forward::Routes->new;
 $route = $r->add_route('articles')->to('Hello#');
-is_deeply $route->{defaults}, {controller => 'Hello', action => undef};
+is_deeply $route->defaults, {controller => 'Hello', action => undef};

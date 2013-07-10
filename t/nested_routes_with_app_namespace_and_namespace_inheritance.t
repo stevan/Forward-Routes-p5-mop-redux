@@ -14,8 +14,8 @@ my $root = Forward::Routes->new->app_namespace('Root');
     my $nested1 = $root->add_route('foo')->namespace('Hello::Foo');
          my $nested2 = $nested1->add_route('bar')->to('Controller#action');
 
-is $nested2->{app_namespace}, 'Root';
-is $nested2->{namespace}, 'Hello::Foo';
+is $nested2->app_namespace, 'Root';
+is $nested2->namespace, 'Hello::Foo';
 my $m = $root->match(get => 'foo/bar');
 is $m->[0]->app_namespace, 'Root';
 is $m->[0]->namespace, 'Hello::Foo';

@@ -1,6 +1,6 @@
-package Forward::Routes;
 use strict;
 use warnings;
+use mop;
 
 use Forward::Routes::Match;
 use Forward::Routes::Pattern;
@@ -15,891 +15,818 @@ our $VERSION = '0.54';
 ##  Constructor
 ## ---------------------------------------------------------------------------
 
-sub new {
-    my $class = shift;
-    my $self = bless {}, $class;
-    return $self->initialize(@_);
-}
+class Forward::Routes {
+
+    has $children = [];
+    has $parent;
+    has $format_instance;
+    has $via;
+    has $namespace;
+    has $app_namespace;
+    has $defaults;
+    has $name_instance;
+    has $pattern;
+    has $routes_by_name;
+    has $resource_name;
+
+    has $_is_bridge;
+
+    has $_inherit_format = 1;
+    has $_inherit_via = 1;
+    has $_inherit_namespace = 1;
+    has $_inherit_app_namespace = 1;
+
+    method BUILD {
+        # block
+        my $code_ref = pop @_ if @_ && ref $_[-1] eq 'CODE';
+
+        # Pattern
+        my $current_pattern = @_ % 2 ? shift : undef;
+        $self->pattern->pattern($current_pattern) if defined $current_pattern;
+
+        # Shortcut in case of chained API
+        return $self unless @_ || $code_ref;
+
+        # Remaining params
+        my $params = ref $_[0] eq 'HASH' ? {%{$_[0]}} : {@_};
+
+        $self->format(delete $params->{format}) if exists $params->{format};
+        $self->via(delete $params->{via}) if exists $params->{via};
+        $self->namespace(delete $params->{namespace}) if exists $params->{namespace};
+        $self->app_namespace(delete $params->{app_namespace}) if exists $params->{app_namespace};
+        $self->defaults(delete $params->{defaults});
+        $self->name(delete $params->{name});
+        $self->to(delete $params->{to});
+        $self->constraints(delete $params->{constraints});
+        $self->resource_name(delete $params->{resource_name});
+
+        # after inheritance
+        $code_ref->($self) if $code_ref;
 
-
-sub initialize {
-    my $self = shift;
-
-    # block
-    my $code_ref = pop @_ if @_ && ref $_[-1] eq 'CODE';
-
-    # inherit
-    $self->{_inherit_format} = 1;
-    $self->{_inherit_via} = 1;
-    $self->{_inherit_namespace} = 1;
-    $self->{_inherit_app_namespace} = 1;
-
-    # Pattern
-    my $pattern = @_ % 2 ? shift : undef;
-    $self->pattern->pattern($pattern) if defined $pattern;
-
-    # Shortcut in case of chained API
-    return $self unless @_ || $code_ref;
-
-    # Remaining params
-    my $params = ref $_[0] eq 'HASH' ? {%{$_[0]}} : {@_};
-
-    $self->format(delete $params->{format}) if exists $params->{format};
-    $self->via(delete $params->{via}) if exists $params->{via};
-    $self->namespace(delete $params->{namespace}) if exists $params->{namespace};
-    $self->app_namespace(delete $params->{app_namespace}) if exists $params->{app_namespace};
-    $self->defaults(delete $params->{defaults});
-    $self->name(delete $params->{name});
-    $self->to(delete $params->{to});
-    $self->constraints(delete $params->{constraints});
-    $self->resource_name(delete $params->{resource_name});
-
-    # after inheritance
-    $code_ref->($self) if $code_ref;
-
-    return $self;
-}
-
-
-## ---------------------------------------------------------------------------
-##  Routes tree
-## ---------------------------------------------------------------------------
-
-sub add_route {
-    my $self = shift;
-    my (@params) = @_;
-
-    my $child = Forward::Routes->new(@params);
-
-    return $self->add_child($child);
-}
-
-
-sub add_resources {
-    my $self = shift;
-    my $params = [@_];
-
-    $params = Forward::Routes::Resources->_prepare_resource_options(@$params);
-
-    my $last_resource;
-
-    while (my $name = shift @$params) {
-
-        my $options;
-        if (@$params && ref $params->[0] eq 'HASH') {
-            $options = shift @$params;
-        }
-
-        $last_resource = $self->_add_plural_resource($name, $options);
-    }
-
-    return $last_resource;
-}
-
-
-sub _add_plural_resource {
-    my $self = shift;
-    my ($resource_name, $options) = @_;
-
-    my $resource = Forward::Routes::Resources::Plural->new($resource_name,
-        resource_name => $resource_name,
-        %$options
-    );
-
-    $resource->_adjust_nested_resources($self);
-
-    $self->add_child($resource);
-
-    # after _adjust_nested_resources because parent name is needed for route name
-    # after add_child because of namespace inheritance for route name
-    $resource->init_options($options);
-    
-    $resource->inflate;
-    
-    return $resource;
-}
-
-
-sub add_singular_resources {
-    my $self = shift;
-    my $params = [@_];
-
-    $params = Forward::Routes::Resources->_prepare_resource_options(@$params);
-
-    my $last_resource;
-
-    while (my $name = shift @$params) {
-
-        my $options;
-        if (@$params && ref $params->[0] eq 'HASH') {
-            $options = shift @$params;
-        }
-
-        $last_resource = $self->_add_singular_resource($name, $options);
-    }
-
-    return $last_resource;
-}
-
-
-sub _add_singular_resource {
-    my $self = shift;
-    my ($resource_name, $options) = @_;
-
-    my $resource = Forward::Routes::Resources::Singular->new($resource_name,
-        resource_name => $resource_name,
-        %$options
-    );
-
-    $resource->_adjust_nested_resources($self);
-
-    $self->add_child($resource);
-
-    # after _adjust_nested_resources because parent name is needed for route name
-    # after add_child because of namespace inheritance for route name
-    $resource->init_options($options);
-    
-    $resource->inflate;
-    
-    return $resource;
-}
-
-
-sub bridge {
-    my $self = shift;
-    return $self->add_route(@_)->_is_bridge(1);
-}
-
-
-sub children {
-    my $self = shift;
-    return $self->{children} ||= [];
-}
-
-
-sub parent {
-    my $self = shift;
-    $self->{parent};
-}
-
-
-sub add_child {
-    my $self = shift;
-    my ($child) = @_;
-
-    # child
-    push @{$self->children}, $child;
-
-    # parent
-    $child->{parent} = $self;
-    weaken $child->{parent};
-
-    # inheritance
-    $child->format(        [@{$self->{format}}]   ) if $self->{format}        && $child->{_inherit_format};
-    $child->via(           [@{$self->{via}}]      ) if $self->{via}           && $child->{_inherit_via};
-    $child->namespace(     $self->{namespace}     ) if $self->{namespace}     && $child->{_inherit_namespace};
-    $child->app_namespace( $self->{app_namespace} ) if $self->{app_namespace} && $child->{_inherit_app_namespace};
-
-    return $child;
-}
-
-
-## ---------------------------------------------------------------------------
-##  Route attributes
-## ---------------------------------------------------------------------------
-
-sub app_namespace {
-    my $self = shift;
-    my (@params) = @_;
-
-    return $self->{app_namespace} unless @params;
-
-    $self->{_inherit_app_namespace} = 0;
-
-    $self->{app_namespace} = $params[0];
-
-    return $self;
-}
-
-
-sub constraints {
-    my $self = shift;
-
-    return $self->pattern->constraints unless defined $_[0];
-
-    $self->pattern->constraints(@_);
-
-    return $self;
-}
-
-
-sub defaults {
-    my $self = shift;
-    my (@params) = @_;
-
-    # Initialize
-    my $d = $self->{defaults} ||= {};
-
-    # Getter
-    return $d unless defined $params[0];
-
-    # Hash ref or array?
-    my $passed_defaults = ref $params[0] eq 'HASH' ? $params[0] : {@params};
-
-    # Merge defaults
-    %$d = (%$d, %$passed_defaults);
-
-    return $self;
-}
-
-
-sub format {
-    my $self = shift;
-    my (@params) = @_;
-
-    return $self->{format} unless @params;
-
-    $self->{_inherit_format} = 0;
-
-    # no format constraint, no format matching performed
-    if (!defined($params[0])) {
-        $self->{format} = undef;
         return $self;
     }
 
-    my $formats = ref $params[0] eq 'ARRAY' ? $params[0] : [@params];
 
-    @$formats = map {lc $_} @$formats;
+    ## ---------------------------------------------------------------------------
+    ##  Routes tree
+    ## ---------------------------------------------------------------------------
 
-    $self->{format} = $formats;
-
-    return $self;
-}
-
-
-sub name {
-    my $self = shift;
-    my ($name) = @_;
-
-    return $self->{name} unless defined $name;
-
-    $self->{name} = $name;
-
-    return $self;
-}
+    method add_route (@params) {
+        my $child = Forward::Routes->new()->BUILD(@params);
+        return $self->add_child($child);
+    }
 
 
-sub resource_name {
-    my $self = shift;
-    my ($name) = @_;
+    method add_resources {
+        my $params = Forward::Routes::Resources->_prepare_resource_options(@_);
 
-    return $self->{resource_name} unless defined $name;
+        my $last_resource;
 
-    $self->{resource_name} = $name;
-    return $self;
-}
+        while (my $name = shift @$params) {
 
+            my $options;
+            if (@$params && ref $params->[0] eq 'HASH') {
+                $options = shift @$params;
+            }
 
-sub namespace {
-    my $self = shift;
-    my (@params) = @_;
+            $last_resource = $self->_add_plural_resource($name, $options);
+        }
 
-    return $self->{namespace} unless @params;
-
-    $self->{_inherit_namespace} = 0;
-
-    $self->{namespace} = $params[0];
-
-    return $self;
-}
+        return $last_resource;
+    }
 
 
-sub pattern {
-    my $self = shift;
-    my (@params) = @_;
+    method _add_plural_resource {
+        my ($passed_resource_name, $options) = @_;
 
-    $self->{pattern} ||= Forward::Routes::Pattern->new;
+        my $resource = Forward::Routes::Resources::Plural->new->BUILD($passed_resource_name,
+            resource_name => $passed_resource_name,
+            %$options
+        );
 
-    return $self->{pattern} unless @params;
+        $resource->_adjust_nested_resources($self);
 
-    $self->{pattern}->pattern(@params);
+        $self->add_child($resource);
 
-    return $self;
-}
+        # after _adjust_nested_resources because parent name is needed for route name
+        # after add_child because of namespace inheritance for route name
+        $resource->init_options($options);
+
+        $resource->inflate;
+
+        return $resource;
+    }
 
 
-sub via {
-    my $self = shift;
-    my (@params) = @_;
+    method add_singular_resources {
+        my $params = Forward::Routes::Resources->_prepare_resource_options(@_);
 
-    return $self->{via} unless @params;
+        my $last_resource;
 
-    $self->{_inherit_via} = 0;
+        while (my $name = shift @$params) {
 
-    if (!defined $params[0]) {
-        $self->{via} = undef;
+            my $options;
+            if (@$params && ref $params->[0] eq 'HASH') {
+                $options = shift @$params;
+            }
+
+            $last_resource = $self->_add_singular_resource($name, $options);
+        }
+
+        return $last_resource;
+    }
+
+
+    method _add_singular_resource ($passed_resource_name, $options) {
+        my $resource = Forward::Routes::Resources::Singular->new->BUILD($passed_resource_name,
+            resource_name => $passed_resource_name,
+            %$options
+        );
+
+        $resource->_adjust_nested_resources($self);
+
+        $self->add_child($resource);
+
+        # after _adjust_nested_resources because parent name is needed for route name
+        # after add_child because of namespace inheritance for route name
+        $resource->init_options($options);
+
+        $resource->inflate;
+
+        return $resource;
+    }
+
+
+    method bridge {
+        return $self->add_route(@_)->_is_bridge(1);
+    }
+
+
+    method children {
+        return $children;
+    }
+
+
+    method parent {
+        return $parent unless @_;
+        $parent = $_[0];
+        weaken $parent;
         return $self;
     }
 
-    my $methods = ref $params[0] eq 'ARRAY' ? $params[0] : [@params];
 
-    @$methods = map {lc $_} @$methods;
+    method add_child ($child) {
+        # child
+        push @{$self->children}, $child;
 
-    $self->{via} = $methods;
+        # parent
+        $child->parent($self);
 
-    return $self;
-}
+        # inheritance
+        $child->format(        [@$format_instance] ) if $format_instance        && $child->_inherit_format;
+        $child->via(           [@$via]        )      if $via           && $child->_inherit_via;
+        $child->namespace(     $namespace     )      if $namespace     && $child->_inherit_namespace;
+        $child->app_namespace( $app_namespace )      if $app_namespace && $child->_inherit_app_namespace;
 
-
-sub to {
-    my $self = shift;
-    my ($to) = @_;
-
-    return unless $to;
-
-    my $params;
-    @$params{qw/controller action/} = split '#' => $to;
-
-    $params->{controller} ||= undef;
-
-    return $self->defaults($params);
-}
-
-
-sub _is_bridge {
-    my $self = shift;
-
-    return $self->{_is_bridge} unless defined $_[0];
-
-    $self->{_is_bridge} = $_[0];
-
-    return $self;
-}
-
-
-sub _is_plural_resource {
-    my $self = shift;
-    return ref $self eq 'Forward::Routes::Resources::Plural' ? 1 : 0;
-}
-
-
-sub _is_singular_resource {
-    my $self = shift;
-    return ref $self eq 'Forward::Routes::Resources::Singular' ? 1 : 0;
-}
-
-
-## ---------------------------------------------------------------------------
-##  Path matching and search
-## ---------------------------------------------------------------------------
-
-sub find_route {
-    my $self = shift;
-    my ($name) = @_;
-
-    $self->{routes_by_name} ||= {};
-    return $self->{routes_by_name}->{$name} if $self->{routes_by_name}->{$name};
-
-    return $self if $self->name && $self->name eq $name;
-
-    foreach my $child (@{$self->children}) {
-        my $match = $child->find_route($name, @_);
-        $self->{routes_by_name}->{$name} = $match if $match;
-        return $match if $match;
-    }
-
-    return undef;
-}
-
-
-sub routes_by_name {
-    my $self = shift;
-    return $self->{routes_by_name};
-}
-
-
-sub match {
-    my $self = shift;
-    my ($method, $path) = @_;
-
-    length $method || croak 'Forward::Routes->match: missing request method';
-    defined $path || croak 'Forward::Routes->match: missing path';
-
-    # Leading slash
-    $path = "/$path" unless $path =~ m{ \A / }x;
-
-    # Search for match
-    my $matches = $self->_match(lc($method) => $path);
-    return unless $matches;
-
-    my $m = $matches->[-1];
-    for (my $i=0; $i<(@$matches-1); $i++) {
-        $matches->[$i]->{params} = {%{$m->params}, %{$matches->[$i]->params} }; # all params except controller and action
-        $matches->[$i]->{captures} = $m->captures;
-        $matches->[$i]->_add_name($m->name);
-    }
-
-    return $matches;
-}
-
-
-sub _match {
-    my $self = shift;
-    my ($method, $path, $format_extracted_from_path, $last_path_part, $last_pattern) = @_;
-
-    # re-evaluate last path part if format changes from undef to def or vice versa
-    # and last path part has already been checked (empty path)
-    my $re_eval_pattern;
-    if (!(length $path) && defined($self->format) ne defined($self->parent->format)) {
-        $path = $last_path_part;
-        $re_eval_pattern = 1;
+        return $child;
     }
 
 
-    # change from def to undef format -> add format extension back to path
-    # (reverse format extraction)
-    if (!(defined $self->format) && $self->parent && defined $self->parent->format) {
-        $path .= '.' . $format_extracted_from_path if $format_extracted_from_path ne '';
-        $format_extracted_from_path = undef;
+    method _inherit_format {
+        $_inherit_format;
+    }
+
+    method _inherit_via {
+        $_inherit_via;
+    }
+
+    method _inherit_namespace {
+        $_inherit_namespace;
+    }
+
+    method _inherit_app_namespace {
+        $_inherit_app_namespace;
+    }
+
+    ## ---------------------------------------------------------------------------
+    ##  Route attributes
+    ## ---------------------------------------------------------------------------
+
+    method app_namespace (@params) {
+        return $app_namespace unless @params;
+
+        $_inherit_app_namespace = 0;
+
+        $app_namespace = $params[0];
+
+        return $self;
     }
 
 
-    # use pattern of current route, or if it does not exist and path has to be
-    # re-evaluated because of format change, use last pattern
-    my $pattern;
-    if (defined $self->pattern->pattern) {
-        $pattern = $self->pattern;
-    }
-    elsif ($re_eval_pattern) {
-        $pattern = $last_pattern;
-    }
-    else {
-        $pattern = undef;
+    method constraints {
+        return $self->pattern->constraints unless defined $_[0];
+
+        $self->pattern->constraints(@_);
+
+        return $self;
     }
 
 
-    # extract format from path if not already done and format option is activated
-    if ($self->format && !(defined $format_extracted_from_path)) {
-        $path =~m/\.([\a-zA-Z0-9]{1,4})$/;
-        $format_extracted_from_path = defined $1 ? $1 : '';
+    method defaults (@params) {
+        # Initialize
+        my $d = $defaults ||= {};
 
-        $path =~s/\.[\a-zA-Z0-9]{1,4}$// if $format_extracted_from_path ne '';
+        # Getter
+        return $d unless defined $params[0];
+
+        # Hash ref or array?
+        my $passed_defaults = ref $params[0] eq 'HASH' ? $params[0] : {@params};
+
+        # Merge defaults
+        %$d = (%$d, %$passed_defaults);
+
+        return $self;
     }
 
 
-    # match current pattern or return
-    my $captures = [];
-    if ($pattern) {
-        ($captures, $last_path_part, $last_pattern) = $self->_match_current_pattern(\$path, $pattern);
-        $captures || return;
+    method format (@params) {
+        return $format_instance unless @params;
+
+        $_inherit_format = 0;
+
+        # no format constraint, no format matching performed
+        if (!defined($params[0])) {
+            $format_instance = undef;
+            return $self;
+        }
+
+        my $formats = ref $params[0] eq 'ARRAY' ? $params[0] : [@params];
+
+        @$formats = map {lc $_} @$formats;
+
+        $format_instance = $formats;
+
+        return $self;
     }
 
-    # no match, as path not empty and no further children exist
-    return if length $path && !@{$self->children};
 
-    # Children match
-    my $matches = [];
+    method name ($name) {
+        return $name_instance unless defined $name;
 
-    # Children
-    if (@{$self->children}) {
+        $name_instance = $name;
+
+        return $self;
+    }
+
+
+    method resource_name ($name) {
+        return $resource_name unless defined $name;
+        $resource_name = $name;
+        return $self;
+    }
+
+
+    method namespace (@params) {
+        return $namespace unless @params;
+        $_inherit_namespace = 0;
+        $namespace = $params[0];
+        return $self;
+    }
+
+
+    method pattern (@params) {
+        $pattern ||= Forward::Routes::Pattern->new;
+        return $pattern unless @params;
+        $pattern->pattern(@params);
+        return $self;
+    }
+
+
+    method via (@params) {
+
+        return $via unless @params;
+        $_inherit_via = 0;
+
+        if (!defined $params[0]) {
+            $via = undef;
+            return $self;
+        }
+
+        my $methods = ref $params[0] eq 'ARRAY' ? $params[0] : [@params];
+
+        @$methods = map {lc $_} @$methods;
+
+        $via = $methods;
+
+        return $self;
+    }
+
+
+    method to ($to) {
+        return unless $to;
+
+        my $params;
+        @$params{qw/controller action/} = split '#' => $to;
+
+        $params->{controller} ||= undef;
+
+        return $self->defaults($params);
+    }
+
+
+    method _is_bridge {
+        return $_is_bridge unless defined $_[0];
+
+        $_is_bridge = $_[0];
+
+        return $self;
+    }
+
+
+    method _is_plural_resource {
+        return ref $self eq 'Forward::Routes::Resources::Plural' ? 1 : 0;
+    }
+
+
+    method _is_singular_resource {
+        return ref $self eq 'Forward::Routes::Resources::Singular' ? 1 : 0;
+    }
+
+
+    ## ---------------------------------------------------------------------------
+    ##  Path matching and search
+    ## ---------------------------------------------------------------------------
+
+    method find_route ($name) {
+        $routes_by_name ||= {};
+        return $routes_by_name->{$name} if $routes_by_name->{$name};
+
+        return $self if $self->name && $self->name eq $name;
+
         foreach my $child (@{$self->children}) {
-
-            # Match?
-            $matches = $child->_match($method => $path, $format_extracted_from_path, $last_path_part, $last_pattern);
-            last if $matches;
-
+            my $match = $child->find_route($name, @_);
+            $routes_by_name->{$name} = $match if $match;
+            return $match if $match;
         }
+
+        return undef;
+    }
+
+
+    method routes_by_name {
+        return $routes_by_name;
+    }
+
+
+    method match ($method, $path) {
+
+        length $method || croak 'Forward::Routes->match: missing request method';
+        defined $path || croak 'Forward::Routes->match: missing path';
+
+        # Leading slash
+        $path = "/$path" unless $path =~ m{ \A / }x;
+
+        # Search for match
+        my $matches = $self->_match(lc($method) => $path);
         return unless $matches;
-    }
 
-
-    # Format and Method
-    unless (@{$self->children}) {
-        $self->_match_method($method) || return;
-        $self->_match_format($format_extracted_from_path) || return;
-    }
-
-    # Match object
-    if (!@$matches){
-        my $m = Forward::Routes::Match->new;
-        $m->_add_name($self->name);
-        $m->_add_app_namespace($self->app_namespace);
-        $m->_add_namespace($self->namespace);
-
-        if ($self->{format}) {
-            $m->_add_params({format => $format_extracted_from_path});
+        my $m = $matches->[-1];
+        for (my $i=0; $i<(@$matches-1); $i++) {
+            $matches->[$i]->set_params({%{$m->params}, %{$matches->[$i]->params} }); # all params except controller and action
+            $matches->[$i]->set_captures($m->captures);
+            $matches->[$i]->_add_name($m->name);
         }
 
-        push @$matches, $m;
+        return $matches;
     }
 
-    if ($self->_is_bridge) {
-        my $m = Forward::Routes::Match->new;
-        $m->_add_app_namespace($self->app_namespace);
-        $m->_add_namespace($self->namespace);
 
-        $m->is_bridge(1);
+    method _match ($method, $path, $format_extracted_from_path, $last_path_part, $last_pattern) {
 
-        $m->_add_params({
-            controller => $self->defaults->{controller},
-            action     => $self->defaults->{action}
-        });
-
-        unshift @$matches, $m;
-    }
-
-    my $match = $matches->[-1];
-
-    my $captures_hash = {};
-    if ($pattern) {
-        $captures_hash = $self->_captures_to_hash($pattern, @$captures);
-    }
-
-    # Merge defaults and captures, Copy! of $self->defaults
-    $match->_add_params({%{$self->defaults}, %$captures_hash});
-
-    # Captures
-    $match->_add_captures($captures_hash);
-
-    return $matches;
-}
+        # re-evaluate last path part if format changes from undef to def or vice versa
+        # and last path part has already been checked (empty path)
+        my $re_eval_pattern;
+        if (!(length $path) && defined($self->format) ne defined($parent->format)) {
+            $path = $last_path_part;
+            $re_eval_pattern = 1;
+        }
 
 
-sub _match_current_pattern {
-    my $self = shift;
-    my ($path_ref, $pattern) = @_;
-
-    my $last_path_part = $$path_ref;
-
-    # Pattern
-    my $regex = $pattern->compile->pattern;
-
-    my @captures = ($$path_ref =~ m/$regex/);
-    return unless @captures;
-
-    # Remove 1 at the end of array if no real captures present
-    splice @captures, @{$pattern->captures};
-
-    # Replace matching part
-    $$path_ref =~ s/$regex//;
-
-    if (length($last_path_part) && !(length $$path_ref)) {
-        return (\@captures, $last_path_part, $pattern);
-    }
-
-    return \@captures;
-}
+        # change from def to undef format -> add format extension back to path
+        # (reverse format extraction)
+        if (!(defined $self->format) && $self->parent && defined $self->parent->format) {
+            $path .= '.' . $format_extracted_from_path if $format_extracted_from_path ne '';
+            $format_extracted_from_path = undef;
+        }
 
 
-sub _match_format {
-    my $self = shift;
-    my ($format) = @_;
-
-    # just relevant for path building, not path matching, as $format
-    # is only extraced if format constraint exists ($self->format)
-    return if !defined($self->format) && defined($format);
-
-    return 1 if !defined($self->format);
-
-    my @success = grep { $_ eq $format } @{$self->format};
-
-    return unless @success;
-
-    return 1;
-}
-
-
-sub _match_method {
-    my $self = shift;
-    my ($value) = @_;
-
-    return 1 unless defined $self->via;
-
-    return unless defined $value;
-
-    return !!grep { $_ eq $value } @{$self->via};
-}
-
-
-sub _captures_to_hash {
-    my $self = shift;
-    my ($pattern, @captures) = @_;
-
-    my $captures = {};
-
-    my $defaults = $self->{defaults};
-
-    foreach my $name (@{$pattern->captures}) {
-        my $capture = shift @captures;
-
-        if (defined $capture) {
-            $captures->{$name} = $capture;
+        # use pattern of current route, or if it does not exist and path has to be
+        # re-evaluated because of format change, use last pattern
+        my $current_pattern;
+        if (defined $self->pattern->pattern) {
+            $current_pattern = $self->pattern;
+        }
+        elsif ($re_eval_pattern) {
+            $current_pattern = $last_pattern;
         }
         else {
-            $captures->{$name} = $defaults->{$name} if defined $defaults->{$name};
+            $current_pattern = undef;
         }
+
+
+        # extract format from path if not already done and format option is activated
+        if ($self->format && !(defined $format_extracted_from_path)) {
+            $path =~m/\.([\a-zA-Z0-9]{1,4})$/;
+            $format_extracted_from_path = defined $1 ? $1 : '';
+
+            $path =~s/\.[\a-zA-Z0-9]{1,4}$// if $format_extracted_from_path ne '';
+        }
+
+
+        # match current pattern or return
+        my $captures = [];
+        if ($current_pattern) {
+            ($captures, $last_path_part, $last_pattern) = $self->_match_current_pattern(\$path, $current_pattern);
+            $captures || return;
+        }
+
+        # no match, as path not empty and no further children exist
+        return if length $path && !@{$self->children};
+
+        # Children match
+        my $matches = [];
+
+        # Children
+        if (@{$self->children}) {
+            foreach my $child (@{$self->children}) {
+
+                # Match?
+                $matches = $child->_match($method => $path, $format_extracted_from_path, $last_path_part, $last_pattern);
+                last if $matches;
+
+            }
+            return unless $matches;
+        }
+
+
+        # Format and Method
+        unless (@{$self->children}) {
+            $self->_match_method($method) || return;
+            $self->_match_format($format_extracted_from_path) || return;
+        }
+
+        # Match object
+        if (!@$matches){
+            my $m = Forward::Routes::Match->new;
+            $m->_add_name($self->name);
+            $m->_add_app_namespace($self->app_namespace);
+            $m->_add_namespace($self->namespace);
+
+            if ($format_instance) {
+                $m->_add_params({format => $format_extracted_from_path});
+            }
+
+            push @$matches, $m;
+        }
+
+        if ($self->_is_bridge) {
+            my $m = Forward::Routes::Match->new;
+            $m->_add_app_namespace($self->app_namespace);
+            $m->_add_namespace($self->namespace);
+
+            $m->is_bridge(1);
+
+            $m->_add_params({
+                controller => $self->defaults->{controller},
+                action     => $self->defaults->{action}
+            });
+
+            unshift @$matches, $m;
+        }
+
+        my $match = $matches->[-1];
+
+        my $captures_hash = {};
+        if ($current_pattern) {
+            $captures_hash = $self->_captures_to_hash($current_pattern, @$captures);
+        }
+
+        # Merge defaults and captures, Copy! of $self->defaults
+        $match->_add_params({%{$self->defaults}, %$captures_hash});
+
+        # Captures
+        $match->_add_captures($captures_hash);
+
+        return $matches;
     }
 
-    return $captures;
-}
 
+    method _match_current_pattern ($path_ref, $current_pattern) {
+        my $last_path_part = $$path_ref;
 
-## ---------------------------------------------------------------------------
-##  Path building
-## ---------------------------------------------------------------------------
+        # Pattern
+        my $regex = $current_pattern->compile->pattern;
 
-sub build_path {
-    my $self = shift;
-    my ($name, %params) = @_;
+        my @captures = ($$path_ref =~ m/$regex/);
+        return unless @captures;
 
-    my $route = $self->find_route($name);
-    croak qq/Unknown name '$name' used to build a path/ unless $route;
+        # Remove 1 at the end of array if no real captures present
+        splice @captures, @{$current_pattern->captures};
 
-    my $path_string = $route->_build_path(\%params);
-    my $path = {};
-    $path->{path} = $path_string;
+        # Replace matching part
+        $$path_ref =~ s/$regex//;
 
-    # format extension
-    my $format;
-    if ($format = $params{format}) {
-        $route->_match_format($format) || die qq/Invalid format '$format' used to build a path/;
-    }
-    $format ||= $route->format ? $route->format->[0] : undef;
-    $path->{path} .= '.' . $format if $format;
+        if (length($last_path_part) && !(length $$path_ref)) {
+            return (\@captures, $last_path_part, $current_pattern);
+        }
 
-
-    # Method
-    $path->{method} = $route->via->[0] if $route->via;
-
-    $path->{path} =~s/^\///;
-
-    return $path;
-}
-
-
-sub _build_path {
-    my $self = shift;
-    my ($params) = @_;
-
-    my $path = '';
-
-    if ($self->{parent}) {
-        $path = $self->{parent}->_build_path($params);
+        return \@captures;
     }
 
-    # Return path if current route has no pattern
-    return $path unless $self->{pattern} && defined $self->{pattern}->pattern;
 
-    $self->{pattern}->compile;
+    method _match_format ($format) {
+        # just relevant for path building, not path matching, as $format
+        # is only extraced if format constraint exists ($self->format)
+        return if !defined($self->format) && defined($format);
 
-    # Use pre-generated pattern->path in case no captures exist for current route
-    if (my $new_path = $self->{pattern}->path) {
-        $path .= $new_path;
+        return 1 if !defined($self->format);
+
+        my @success = grep { $_ eq $format } @{$self->format};
+
+        return unless @success;
+
+        return 1;
+    }
+
+
+    method _match_method ($value) {
+        return 1 unless defined $self->via;
+
+        return unless defined $value;
+
+        return !!grep { $_ eq $value } @{$self->via};
+    }
+
+
+    method _captures_to_hash ($current_pattern, @captures) {
+        my $captures = {};
+
+        foreach my $name (@{$current_pattern->captures}) {
+            my $capture = shift @captures;
+
+            if (defined $capture) {
+                $captures->{$name} = $capture;
+            }
+            else {
+                $captures->{$name} = $defaults->{$name} if defined $defaults->{$name};
+            }
+        }
+
+        return $captures;
+    }
+
+
+    ## ---------------------------------------------------------------------------
+    ##  Path building
+    ## ---------------------------------------------------------------------------
+
+    method build_path ($name, %params) {
+        my $route = $self->find_route($name);
+        croak qq/Unknown name '$name' used to build a path/ unless $route;
+
+        my $path_string = $route->_build_path(\%params);
+        my $path = {};
+        $path->{path} = $path_string;
+
+        # format extension
+        my $format;
+        if ($format = $params{format}) {
+            $route->_match_format($format) || die qq/Invalid format '$format' used to build a path/;
+        }
+        $format ||= $route->format ? $route->format->[0] : undef;
+        $path->{path} .= '.' . $format if $format;
+
+
+        # Method
+        $path->{method} = $route->via->[0] if $route->via;
+
+        $path->{path} =~s/^\///;
+
         return $path;
     }
 
-    # Path parts by optional level
-    my $parts = {};
 
-    # Capture is required if other captures have already been defined in same optional group
-    my $existing_capture = {};
+    method _build_path ($params) {
+        my $path = '';
 
-    # No captures allowed if other captures empty in same optional group
-    my $empty_capture = {};
-
-    # Optional depth
-    my $depth = 0;
-
-    foreach my $part (@{$self->{pattern}->parts}) {
-        my $type = $part->{type};
-        my $name = $part->{name} || '';
-
-        # Open group
-        if ($type eq 'open_group') {
-            $depth++ if ${$part->{optional}};
-            next;
+        if ($parent) {
+            $path = $parent->_build_path($params);
         }
 
-        if ($type eq 'close_group') {
+        # Return path if current route has no pattern
+        return $path unless $pattern && defined $pattern->pattern;
 
-            # Close optional group          
-            if (${$part->{optional}}) {
+        $pattern->compile;
 
-                # Only pass group content to lower levels if captures have values
-                if ($existing_capture->{$depth}) {
-    
-                    # push data to optional level
-                    push @{$parts->{$depth-1}}, @{$parts->{$depth}};
-    
-                    # error, if lower level optional group has emtpy captures, but current
-                    # optional group has filled captures
-                    $self->capture_error($empty_capture->{$depth-1})
-                      if $empty_capture->{$depth-1};
-    
-                    # all other captures in lower level must have values now
-                    $existing_capture->{$depth-1} += $existing_capture->{$depth};
+        # Use pre-generated pattern->path in case no captures exist for current route
+        if (my $new_path = $pattern->path) {
+            $path .= $new_path;
+            return $path;
+        }
+
+        # Path parts by optional level
+        my $parts = {};
+
+        # Capture is required if other captures have already been defined in same optional group
+        my $existing_capture = {};
+
+        # No captures allowed if other captures empty in same optional group
+        my $empty_capture = {};
+
+        # Optional depth
+        my $depth = 0;
+
+        foreach my $part (@{$pattern->parts}) {
+            my $type = $part->{type};
+            my $name = $part->{name} || '';
+
+            # Open group
+            if ($type eq 'open_group') {
+                $depth++ if ${$part->{optional}};
+                next;
+            }
+
+            if ($type eq 'close_group') {
+
+                # Close optional group
+                if (${$part->{optional}}) {
+
+                    # Only pass group content to lower levels if captures have values
+                    if ($existing_capture->{$depth}) {
+
+                        # push data to optional level
+                        push @{$parts->{$depth-1}}, @{$parts->{$depth}};
+
+                        # error, if lower level optional group has emtpy captures, but current
+                        # optional group has filled captures
+                        $self->capture_error($empty_capture->{$depth-1})
+                          if $empty_capture->{$depth-1};
+
+                        # all other captures in lower level must have values now
+                        $existing_capture->{$depth-1} += $existing_capture->{$depth};
+                    }
+
+                    $existing_capture->{$depth} = 0;
+                    $empty_capture->{$depth} = undef;
+                    $parts->{$depth} = [];
+
+                    $depth--;
+
+                    next;
                 }
-    
-                $existing_capture->{$depth} = 0;
-                $empty_capture->{$depth} = undef;
-                $parts->{$depth} = [];
-    
-                $depth--;
-    
-                next;
+                # Close non optional group
+                else {
+                    next;
+                }
+
             }
-            # Close non optional group
-            else {
-                next;
+
+            my $path_part;
+
+            # Capture
+            if ($type eq 'capture') {
+
+                # Param
+                $path_part = $params->{$name};
+                $path_part = defined $path_part && length $path_part ? $path_part : $defaults->{$name};
+
+                if (!$depth && !defined $path_part) {
+                    $self->capture_error($name);
+                }
+                elsif ($depth && !defined $path_part) {
+
+                    # Capture value has to be passed if other captures in same
+                    # group have already been passed
+
+                    $self->capture_error($name) if $existing_capture->{$depth};
+
+                    # Save capture as empty as following captures in same group
+                    # have to be empty as well
+                    $empty_capture->{$depth} = $name;
+
+                    next;
+
+                }
+                elsif ($depth && defined $path_part) {
+
+                    # Earlier captures in same group can not be empty
+                    $self->capture_error($empty_capture->{$depth})
+                      if $empty_capture->{$depth};
+
+                    $existing_capture->{$depth} = 1;
+                }
+
+                # Constraint
+                my $constraint = $part->{constraint};
+                if (defined $constraint) {
+                    croak qq/Param '$name' fails a constraint/
+                      unless $path_part =~ m/^$constraint$/;
+                }
+
             }
+            # Globbing
+            elsif ($type eq 'glob') {
+                my $name = $part->{name};
+
+                croak qq/Required glob param '$name' was not passed when building a path/
+                  unless exists $params->{$name};
+
+                $path_part = $params->{$name};
+            }
+            # Text
+            elsif ($type eq 'text') {
+                $path_part = $part->{text};
+            }
+            # Slash
+            elsif ($type eq 'slash') {
+                $path_part = '/';
+            }
+
+            # Push param in optional group array
+            push @{$parts->{$depth}}, $path_part;
 
         }
 
-        my $path_part;
+        my $new_path = join('' => @{$parts->{0}});
 
-        # Capture
-        if ($type eq 'capture') {
-
-            # Param
-            $path_part = $params->{$name};
-            $path_part = defined $path_part && length $path_part ? $path_part : $self->{defaults}->{$name};
-
-            if (!$depth && !defined $path_part) {
-                $self->capture_error($name);
-            }
-            elsif ($depth && !defined $path_part) {
-
-                # Capture value has to be passed if other captures in same
-                # group have already been passed
-
-                $self->capture_error($name) if $existing_capture->{$depth};
-
-                # Save capture as empty as following captures in same group
-                # have to be empty as well
-                $empty_capture->{$depth} = $name;
-
-                next;
-
-            }
-            elsif ($depth && defined $path_part) {
-
-                # Earlier captures in same group can not be empty
-                $self->capture_error($empty_capture->{$depth})
-                  if $empty_capture->{$depth};
-
-                $existing_capture->{$depth} = 1;
-            }
-
-            # Constraint
-            my $constraint = $part->{constraint};
-            if (defined $constraint) {
-                croak qq/Param '$name' fails a constraint/
-                  unless $path_part =~ m/^$constraint$/;
-            }
-
-        }
-        # Globbing
-        elsif ($type eq 'glob') {
-            my $name = $part->{name};
-
-            croak qq/Required glob param '$name' was not passed when building a path/
-              unless exists $params->{$name};
-
-            $path_part = $params->{$name};
-        }
-        # Text
-        elsif ($type eq 'text') {
-            $path_part = $part->{text};
-        }
-        # Slash
-        elsif ($type eq 'slash') {
-            $path_part = '/';
-        }
-
-        # Push param in optional group array
-        push @{$parts->{$depth}}, $path_part;
-
-    }
-
-    my $new_path = join('' => @{$parts->{0}});
-
-    if ($self->{parent}) {
-        $path .= $new_path;
-    }
-    else {
-        $path = $new_path;
-    }
-
-    return $path;
-
-}
-
-
-sub capture_error {
-    my $self = shift;
-    my ($capture_name) = @_;
-
-    croak qq/Required param '$capture_name' was not passed when building a path/;
-}
-
-
-## ---------------------------------------------------------------------------
-##  Helpers
-## ---------------------------------------------------------------------------
-
-# overwrite code ref for more advanced approach:
-# sub {
-#     require Lingua::EN::Inflect::Number;
-#     return &Lingua::EN::Inflect::Number::to_S($value);
-# }
-sub singularize {
-    my $self = shift;
-    my ($code_ref) = @_;
-
-    # Initialize very basic singularize code ref
-    $Forward::Routes::singularize ||= sub {
-        my $value = shift;
-
-        if ($value =~ s/ies$//) {
-            $value .= 'y';
+        if ($parent) {
+            $path .= $new_path;
         }
         else {
-            $value =~ s/s$//;
+            $path = $new_path;
         }
 
-        return $value;
-    };
+        return $path;
 
-    return $Forward::Routes::singularize unless $code_ref;
+    }
 
-    $Forward::Routes::singularize = $code_ref;
 
-    return $self;
+    method capture_error ($capture_name) {
+        croak qq/Required param '$capture_name' was not passed when building a path/;
+    }
 
+
+    ## ---------------------------------------------------------------------------
+    ##  Helpers
+    ## ---------------------------------------------------------------------------
+
+    # overwrite code ref for more advanced approach:
+    # sub {
+    #     require Lingua::EN::Inflect::Number;
+    #     return &Lingua::EN::Inflect::Number::to_S($value);
+    # }
+    method singularize ($code_ref) {
+        # Initialize very basic singularize code ref
+        $Forward::Routes::singularize ||= sub {
+            my $value = shift;
+
+            if ($value =~ s/ies$//) {
+                $value .= 'y';
+            }
+            else {
+                $value =~ s/s$//;
+            }
+
+            return $value;
+        };
+
+        return $Forward::Routes::singularize unless $code_ref;
+
+        $Forward::Routes::singularize = $code_ref;
+
+        return $self;
+
+    }
+
+
+    method format_resource_controller ($code_ref) {
+        $Forward::Routes::format_controller ||= sub {
+            my $value = shift;
+
+            my @parts = split /-/, $value;
+            for my $part (@parts) {
+                $part = join '', map {ucfirst} split /_/, $part;
+            }
+            return join '::', @parts;
+        };
+
+        return $Forward::Routes::format_controller unless $code_ref;
+
+        $Forward::Routes::format_controller = $code_ref;
+
+        return $self;
+    }
 }
-
-
-sub format_resource_controller {
-    my $self = shift;
-    my ($code_ref) = @_;
-
-    $Forward::Routes::format_controller ||= sub {
-        my $value = shift;
-
-        my @parts = split /-/, $value;
-        for my $part (@parts) {
-            $part = join '', map {ucfirst} split /_/, $part;
-        }
-        return join '::', @parts;
-    };
-
-    return $Forward::Routes::format_controller unless $code_ref;
-
-    $Forward::Routes::format_controller = $code_ref;
-
-    return $self;
-}
-
 
 
 1;

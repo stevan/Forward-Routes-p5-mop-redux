@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 173;
+use Test::More tests => 171;
 use lib 'lib';
 use Forward::Routes;
 
@@ -27,11 +27,10 @@ is ref $r, 'Forward::Routes';
 
 $r = Forward::Routes->new;
 
-is $r->{method}, undef;
-is $r->{defaults}, undef;
-is $r->{name}, undef;
-is $r->{to}, undef;
-is $r->{pattern}, undef;
+is $r->via, undef;
+is $r->name, undef;
+is $r->to, undef;
+
 
 
 #############################################################################

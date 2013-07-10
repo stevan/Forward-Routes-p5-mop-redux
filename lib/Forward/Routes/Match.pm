@@ -1,149 +1,116 @@
-package Forward::Routes::Match;
-
 use strict;
 use warnings;
+use mop;
 
 
-sub new {
-    return bless {}, shift;
+class Forward::Routes::Match {
+
+    has $name;
+    has $app_namespace;
+    has $namespace;
+    has $params_instance = {};
+    has $captures = {};
+    has $is_bridge;
+    
+    method _add_params ($params) {
+        %{$self->params} = (%$params, %{$self->params});
+        return $self;
+    }
+    
+    
+    method _add_captures ($params) {
+        %{$self->captures} = (%$params, %{$self->captures});
+        return $self;
+    }
+    
+    
+    method _add_name (@params) {
+        $name = $params[0] if @params;
+        return $self;
+    }
+    
+    
+    method _add_namespace (@params) {
+        $namespace = $params[0] if @params;
+        return $self;
+    }
+    
+    
+    method _add_app_namespace (@params) {
+        $app_namespace = $params[0] if @params;
+        return $self;
+    }
+    
+    
+    method params ($key) {
+        return $params_instance unless defined $key && length $key;
+        return $params_instance->{$key};
+    }
+    
+    
+    method captures ($key) {
+        return $captures unless defined $key && length $key;
+        return $captures->{$key};
+    }
+    
+    
+    method set_params {
+        $params_instance = $_[0];
+        return $self;
+    }
+    
+
+    method set_captures {
+        $captures = $_[0];
+        return $self;
+    }
+    
+    
+    method is_bridge (@is_bridge) {
+        return $is_bridge unless @is_bridge;
+        $is_bridge = $is_bridge[0];
+        return $self;
+    }
+    
+    
+    method name {
+        return $name;
+    }
+    
+    
+    method controller {
+        return $params_instance->{controller};
+    }
+    
+    
+    method namespace {
+        return $namespace;
+    }
+    
+    
+    method app_namespace {
+        return $app_namespace;
+    }
+    
+    
+    method class {
+        return undef unless $params_instance->{controller};
+    
+        my @class;
+    
+        push @class, $app_namespace if $app_namespace;
+    
+        push @class, $namespace if $namespace;
+    
+        push @class, $params_instance->{controller};
+    
+        return join('::', @class);
+    }
+    
+    
+    method action {
+        return $params_instance->{action};
+    }
 }
-
-sub _add_params {
-    my $self = shift;
-    my ($params) = @_;
-
-    %{$self->params} = (%$params, %{$self->params});
-
-    return $self;
-}
-
-
-sub _add_captures {
-    my $self = shift;
-    my ($params) = @_;
-
-    %{$self->captures} = (%$params, %{$self->captures});
-
-    return $self;
-}
-
-
-sub _add_name {
-    my $self = shift;
-    my (@params) = @_;
-
-    $self->{name} = $params[0] if @params;
-
-    return $self;
-}
-
-
-sub _add_namespace {
-    my $self = shift;
-    my (@params) = @_;
-
-    $self->{namespace} = $params[0] if @params;
-
-    return $self;
-}
-
-
-sub _add_app_namespace {
-    my $self = shift;
-    my (@params) = @_;
-
-    $self->{app_namespace} = $params[0] if @params;
-
-    return $self;
-}
-
-
-sub params {
-    my $self = shift;
-    my ($key) = @_;
-
-    # Initialize
-    $self->{params} ||= {};
-
-    # Get hash
-    return $self->{params} unless defined $key && length $key;
-
-    # Get hash value
-    return $self->{params}->{$key};
-}
-
-
-sub captures {
-    my $self = shift;
-    my ($key) = @_;
-
-    # Initialize
-    $self->{captures} ||= {};
-
-    # Get hash
-    return $self->{captures} unless defined $key && length $key;
-
-    # Get hash value
-    return $self->{captures}->{$key};
-}
-
-
-sub is_bridge {
-    my $self = shift;
-    my (@is_bridge) = @_;
-
-    return $self->{is_bridge} unless @is_bridge;
-
-    $self->{is_bridge} = $is_bridge[0];
-
-    return $self;
-}
-
-
-sub name {
-    my $self = shift;
-    return $self->{name};
-}
-
-
-sub controller {
-    my $self = shift;
-    return $self->{params}->{controller};
-}
-
-
-sub namespace {
-    my $self = shift;
-    return $self->{namespace};
-}
-
-
-sub app_namespace {
-    my $self = shift;
-    return $self->{app_namespace};
-}
-
-
-sub class {
-    my $self = shift;
-
-    return undef unless $self->{params}->{controller};
-
-    my @class;
-
-    push @class, $self->{app_namespace} if $self->{app_namespace};
-
-    push @class, $self->{namespace} if $self->{namespace};
-
-    push @class, $self->{params}->{controller};
-
-    return join('::', @class);
-}
-
-
-sub action {
-    return shift->{params}->{action};
-}
-
 
 1;
