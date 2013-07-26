@@ -1,3 +1,4 @@
+package Forward::Routes;
 use strict;
 use warnings;
 use mop;
@@ -7,7 +8,7 @@ use Forward::Routes::Resources::Singular;
 use Carp;
 
 
-class Forward::Routes::Resources extends Forward::Routes {
+class Resources extends Forward::Routes {
 
     has $only;
     has $nested_resources_parent_name;

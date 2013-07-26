@@ -1,3 +1,4 @@
+package Forward;
 use strict;
 use warnings;
 use mop;
@@ -15,7 +16,7 @@ our $VERSION = '0.54';
 ##  Constructor
 ## ---------------------------------------------------------------------------
 
-class Forward::Routes {
+class Routes {
 
     has $children = [];
     has $parent;
