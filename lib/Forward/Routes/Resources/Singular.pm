@@ -3,11 +3,11 @@ use warnings;
 use mop;
 
 
-class Forward::Routes::Resources::Singular (extends => 'Forward::Routes::Resources') {
+class Forward::Routes::Resources::Singular extends Forward::Routes::Resources {
 
     method enabled_routes {
         my $only = $self->only;
-    
+
         my %selected = (
             create      => 1,
             show        => 1,

@@ -7,7 +7,7 @@ use Forward::Routes::Resources::Singular;
 use Carp;
 
 
-class Forward::Routes::Resources (extends => 'Forward::Routes') {
+class Forward::Routes::Resources extends Forward::Routes {
 
     has $only;
     has $nested_resources_parent_name;

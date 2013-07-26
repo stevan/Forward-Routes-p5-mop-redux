@@ -3,8 +3,8 @@ use warnings;
 use mop;
 
 
-class Forward::Routes::Resources::Plural (extends => 'Forward::Routes::Resources') {
-  
+class Forward::Routes::Resources::Plural extends Forward::Routes::Resources {
+
     has $id_constraint;
     has $collection;
     has $members;
