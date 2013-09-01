@@ -18,24 +18,24 @@ our $VERSION = '0.54';
 
 class Routes {
 
-    has $children = [];
-    has $parent;
-    has $format_instance;
-    has $via;
-    has $namespace;
-    has $app_namespace;
-    has $defaults;
-    has $name_instance;
-    has $pattern;
-    has $routes_by_name;
-    has $resource_name;
+    has $!children is ro = [];
+    has $!parent;
+    has $!format_instance;
+    has $!via;
+    has $!namespace;
+    has $!app_namespace;
+    has $!defaults;
+    has $!name_instance;
+    has $!pattern;
+    has $!routes_by_name is ro;
+    has $!resource_name;
 
-    has $_is_bridge;
+    has $!_is_bridge;
 
-    has $_inherit_format = 1;
-    has $_inherit_via = 1;
-    has $_inherit_namespace = 1;
-    has $_inherit_app_namespace = 1;
+    has $!_inherit_format is ro = 1;
+    has $!_inherit_via is ro = 1;
+    has $!_inherit_namespace is ro = 1;
+    has $!_inherit_app_namespace is ro = 1;
 
     method BUILD {
         # block
@@ -163,15 +163,10 @@ class Routes {
     }
 
 
-    method children {
-        return $children;
-    }
-
-
     method parent {
-        return $parent unless @_;
-        $parent = $_[0];
-        weaken $parent;
+        return $!parent unless @_;
+        $!parent = $_[0];
+        weaken $!parent;
         return $self;
     }
 
@@ -184,41 +179,25 @@ class Routes {
         $child->parent($self);
 
         # inheritance
-        $child->format(        [@$format_instance] ) if $format_instance        && $child->_inherit_format;
-        $child->via(           [@$via]        )      if $via           && $child->_inherit_via;
-        $child->namespace(     $namespace     )      if $namespace     && $child->_inherit_namespace;
-        $child->app_namespace( $app_namespace )      if $app_namespace && $child->_inherit_app_namespace;
+        $child->format(        [@{$!format_instance}] ) if $!format_instance        && $child->_inherit_format;
+        $child->via(           [@{$!via}]        )      if $!via           && $child->_inherit_via;
+        $child->namespace(     $!namespace     )        if $!namespace     && $child->_inherit_namespace;
+        $child->app_namespace( $!app_namespace )        if $!app_namespace && $child->_inherit_app_namespace;
 
         return $child;
     }
 
-
-    method _inherit_format {
-        $_inherit_format;
-    }
-
-    method _inherit_via {
-        $_inherit_via;
-    }
-
-    method _inherit_namespace {
-        $_inherit_namespace;
-    }
-
-    method _inherit_app_namespace {
-        $_inherit_app_namespace;
-    }
 
     ## ---------------------------------------------------------------------------
     ##  Route attributes
     ## ---------------------------------------------------------------------------
 
     method app_namespace (@params) {
-        return $app_namespace unless @params;
+        return $!app_namespace unless @params;
 
-        $_inherit_app_namespace = 0;
+        $!_inherit_app_namespace = 0;
 
-        $app_namespace = $params[0];
+        $!app_namespace = $params[0];
 
         return $self;
     }
@@ -235,7 +214,7 @@ class Routes {
 
     method defaults (@params) {
         # Initialize
-        my $d = $defaults ||= {};
+        my $d = $!defaults ||= {};
 
         # Getter
         return $d unless defined $params[0];
@@ -251,13 +230,13 @@ class Routes {
 
 
     method format (@params) {
-        return $format_instance unless @params;
+        return $!format_instance unless @params;
 
-        $_inherit_format = 0;
+        $!_inherit_format = 0;
 
         # no format constraint, no format matching performed
         if (!defined($params[0])) {
-            $format_instance = undef;
+            $!format_instance = undef;
             return $self;
         }
 
@@ -265,51 +244,51 @@ class Routes {
 
         @$formats = map {lc $_} @$formats;
 
-        $format_instance = $formats;
+        $!format_instance = $formats;
 
         return $self;
     }
 
 
     method name ($name) {
-        return $name_instance unless defined $name;
+        return $!name_instance unless defined $name;
 
-        $name_instance = $name;
+        $!name_instance = $name;
 
         return $self;
     }
 
 
     method resource_name ($name) {
-        return $resource_name unless defined $name;
-        $resource_name = $name;
+        return $!resource_name unless defined $name;
+        $!resource_name = $name;
         return $self;
     }
 
 
     method namespace (@params) {
-        return $namespace unless @params;
-        $_inherit_namespace = 0;
-        $namespace = $params[0];
+        return $!namespace unless @params;
+        $!_inherit_namespace = 0;
+        $!namespace = $params[0];
         return $self;
     }
 
 
     method pattern (@params) {
-        $pattern ||= Forward::Routes::Pattern->new;
-        return $pattern unless @params;
-        $pattern->pattern(@params);
+        $!pattern ||= Forward::Routes::Pattern->new;
+        return $!pattern unless @params;
+        $!pattern->pattern(@params);
         return $self;
     }
 
 
     method via (@params) {
 
-        return $via unless @params;
-        $_inherit_via = 0;
+        return $!via unless @params;
+        $!_inherit_via = 0;
 
         if (!defined $params[0]) {
-            $via = undef;
+            $!via = undef;
             return $self;
         }
 
@@ -317,7 +296,7 @@ class Routes {
 
         @$methods = map {lc $_} @$methods;
 
-        $via = $methods;
+        $!via = $methods;
 
         return $self;
     }
@@ -336,9 +315,9 @@ class Routes {
 
 
     method _is_bridge {
-        return $_is_bridge unless defined $_[0];
+        return $!_is_bridge unless defined $_[0];
 
-        $_is_bridge = $_[0];
+        $!_is_bridge = $_[0];
 
         return $self;
     }
@@ -359,23 +338,18 @@ class Routes {
     ## ---------------------------------------------------------------------------
 
     method find_route ($name) {
-        $routes_by_name ||= {};
-        return $routes_by_name->{$name} if $routes_by_name->{$name};
+        $!routes_by_name ||= {};
+        return $!routes_by_name->{$name} if $!routes_by_name->{$name};
 
         return $self if $self->name && $self->name eq $name;
 
         foreach my $child (@{$self->children}) {
             my $match = $child->find_route($name, @_);
-            $routes_by_name->{$name} = $match if $match;
+            $!routes_by_name->{$name} = $match if $match;
             return $match if $match;
         }
 
         return undef;
-    }
-
-
-    method routes_by_name {
-        return $routes_by_name;
     }
 
 
@@ -407,7 +381,7 @@ class Routes {
         # re-evaluate last path part if format changes from undef to def or vice versa
         # and last path part has already been checked (empty path)
         my $re_eval_pattern;
-        if (!(length $path) && defined($self->format) ne defined($parent->format)) {
+        if (!(length $path) && defined($self->format) ne defined($!parent->format)) {
             $path = $last_path_part;
             $re_eval_pattern = 1;
         }
@@ -483,7 +457,7 @@ class Routes {
             $m->_add_app_namespace($self->app_namespace);
             $m->_add_namespace($self->namespace);
 
-            if ($format_instance) {
+            if ($!format_instance) {
                 $m->_add_params({format => $format_extracted_from_path});
             }
 
@@ -579,7 +553,7 @@ class Routes {
                 $captures->{$name} = $capture;
             }
             else {
-                $captures->{$name} = $defaults->{$name} if defined $defaults->{$name};
+                $captures->{$name} = $!defaults->{$name} if defined $!defaults->{$name};
             }
         }
 
@@ -620,17 +594,17 @@ class Routes {
     method _build_path ($params) {
         my $path = '';
 
-        if ($parent) {
-            $path = $parent->_build_path($params);
+        if ($!parent) {
+            $path = $!parent->_build_path($params);
         }
 
         # Return path if current route has no pattern
-        return $path unless $pattern && defined $pattern->pattern;
+        return $path unless $!pattern && defined $!pattern->pattern;
 
-        $pattern->compile;
+        $!pattern->compile;
 
         # Use pre-generated pattern->path in case no captures exist for current route
-        if (my $new_path = $pattern->path) {
+        if (my $new_path = $!pattern->path) {
             $path .= $new_path;
             return $path;
         }
@@ -647,7 +621,7 @@ class Routes {
         # Optional depth
         my $depth = 0;
 
-        foreach my $part (@{$pattern->parts}) {
+        foreach my $part (@{$!pattern->parts}) {
             my $type = $part->{type};
             my $name = $part->{name} || '';
 
@@ -699,7 +673,7 @@ class Routes {
 
                 # Param
                 $path_part = $params->{$name};
-                $path_part = defined $path_part && length $path_part ? $path_part : $defaults->{$name};
+                $path_part = defined $path_part && length $path_part ? $path_part : $!defaults->{$name};
 
                 if (!$depth && !defined $path_part) {
                     $self->capture_error($name);
@@ -760,7 +734,7 @@ class Routes {
 
         my $new_path = join('' => @{$parts->{0}});
 
-        if ($parent) {
+        if ($!parent) {
             $path .= $new_path;
         }
         else {

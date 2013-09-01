@@ -10,29 +10,29 @@ my $TOKEN = '[^\/()?:]+';
 
 class Pattern {
 
-    has $pattern;
-    has $captures;
-    has $prefix;
-    has $path;
-    has $parts;
-    has $constraints = {};
-    has $exclude = {};
+    has $!pattern;
+    has $!captures;
+    has $!prefix;
+    has $!path;
+    has $!parts;
+    has $!constraints = {};
+    has $!exclude is ro = {};
 
     method compile {
 
-        return $self unless defined $pattern;
+        return $self unless defined $!pattern;
 
-        return $self if ref $pattern eq 'Regexp';
+        return $self if ref $!pattern eq 'Regexp';
 
-        $captures = [];
+        $!captures = [];
 
         my $re = '';
 
         # leading slash
-        $pattern = '/' . $pattern unless $pattern =~ m{\A/};
+        $!pattern = '/' . $!pattern unless $!pattern =~ m{\A/};
 
-        if (defined $prefix) {
-            $pattern = "/$prefix$pattern";
+        if (defined $!prefix) {
+            $!pattern = "/" . $!prefix . $!pattern;
         }
 
         my $par_depth = 0;
@@ -43,18 +43,18 @@ class Pattern {
 
         my $current_path;
 
-        pos $pattern = 0;
-        while (pos $pattern < length $pattern) {
+        pos $!pattern = 0;
+        while (pos $!pattern < length $!pattern) {
 
             # Slash /
-            if ($pattern =~ m{ \G \/ }gcx) {
+            if ($!pattern =~ m{ \G \/ }gcx) {
 
                 # Regex
                 $re .= '/';
                 $current_path .= '/';
 
                 # Parts
-                unless ($pattern eq '/') {
+                unless ($!pattern eq '/') {
                     push @parts, {
                       type     => 'slash'
                     }
@@ -62,7 +62,7 @@ class Pattern {
             }
 
             # Capture :foo
-            elsif ($pattern =~ m{ \G :($TOKEN) }gcx) {
+            elsif ($!pattern =~ m{ \G :($TOKEN) }gcx) {
 
                 # Regex
                 my $name = $1;
@@ -76,9 +76,9 @@ class Pattern {
                     $re_part = '[^\/]+';
                 }
 
-                if(exists $exclude->{$name}){
+                if(exists $!exclude->{$name}){
                     my $exclude_temp;
-                    my @words = @{$exclude->{$name}};
+                    my @words = @{$!exclude->{$name}};
                     foreach my $word (@words) {
                         $exclude_temp .= "(?!$word".'\Z)';
                     }
@@ -95,11 +95,11 @@ class Pattern {
                 };
 
                 # Capture names
-                push @{$captures}, $name;
+                push @{$!captures}, $name;
             }
 
             # *foo
-            elsif ($pattern =~ m{ \G \*($TOKEN) }gcx) {
+            elsif ($!pattern =~ m{ \G \*($TOKEN) }gcx) {
 
                 # Regex
                 my $name = $1;
@@ -112,11 +112,11 @@ class Pattern {
                 };
 
                 # Capture names
-                push @{$captures}, $name;
+                push @{$!captures}, $name;
             }
 
             # Text
-            elsif ($pattern =~ m{ \G ($TOKEN) }gcx) {
+            elsif ($!pattern =~ m{ \G ($TOKEN) }gcx) {
 
                 # Regex
                 my $text = $1;
@@ -132,7 +132,7 @@ class Pattern {
             }
 
             # Open group (
-            elsif ($pattern =~ m{ \G \( }gcx) {
+            elsif ($!pattern =~ m{ \G \( }gcx) {
 
                 # Group depth (optional and non optional groups)
                 $par_depth++;
@@ -155,7 +155,7 @@ class Pattern {
             }
 
             # Close optional group
-            elsif ($pattern =~ m{ \G \)\? }gcx) {
+            elsif ($!pattern =~ m{ \G \)\? }gcx) {
 
                 # Parts (optional must be saved as scalar ref, as optional
                 # always has to be scalar ref)
@@ -177,7 +177,7 @@ class Pattern {
 
             }
             # Close non optional group
-            elsif ($pattern =~ m{ \G \) }gcx) {
+            elsif ($!pattern =~ m{ \G \) }gcx) {
 
                 # Parts
                 my $optional = 0;
@@ -201,67 +201,63 @@ class Pattern {
         }
 
         if ($par_depth != 0) {
-            croak qq/Parentheses are not balanced in pattern '$pattern'/;
+            croak qq/Parentheses are not balanced in pattern '$!pattern'/;
         }
 
         $re = qr/\A $re/xi;
 
-        $path    = $current_path unless @{$captures};
-        $parts   = [@parts];
-        $pattern = $re;
+        $!path    = $current_path unless @{$!captures};
+        $!parts   = [@parts];
+        $!pattern = $re;
 
         return $self;
     }
 
     method path {
-        return $path unless $_[0];
+        return $!path unless $_[0];
 
-        $path = $_[0];
+        $!path = $_[0];
         return $self;
     }
 
     method prefix {
-        return $prefix unless $_[0];
+        return $!prefix unless $_[0];
 
-        $prefix = $_[0];
+        $!prefix = $_[0];
         return $self;
     }
 
     method pattern {
-        return $pattern unless $_[0];
+        return $!pattern unless $_[0];
 
-        $pattern = $_[0];
+        $!pattern = $_[0];
         return $self;
     }
 
     method parts {
-        $parts ||= [];
-        return $parts unless $_[0];
+        $!parts ||= [];
+        return $!parts unless $_[0];
 
-        $parts = $_[0];
+        $!parts = $_[0];
         return $self;
     }
 
     method captures {
-        $captures ||= [];
-        return $captures unless $_[0];
+        $!captures ||= [];
+        return $!captures unless $_[0];
 
-        $captures = $_[0];
+        $!captures = $_[0];
         return $self;
     }
 
     method constraints {
-        return $constraints unless defined $_[0];
+        return $!constraints unless defined $_[0];
 
         my %new_constraints = ref $_[0] eq 'HASH' ? %{$_[0]} : @_;
 
-        %$constraints = (%$constraints, %new_constraints);
+        %{$!constraints} = (%{$!constraints}, %new_constraints);
 
         return $self;
-    }
-
-    method exclude {
-        $exclude;
     }
 
 }

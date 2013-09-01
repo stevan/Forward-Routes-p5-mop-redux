@@ -6,9 +6,9 @@ use mop;
 
 class Plural extends Forward::Routes::Resources {
 
-    has $id_constraint;
-    has $collection;
-    has $members;
+    has $!id_constraint;
+    has $!collection;
+    has $!members;
 
     method add_collection_route ($pattern, @params) {
 
@@ -20,8 +20,8 @@ class Plural extends Forward::Routes::Resources {
         $collection_route_name =~s|^/||;
         $collection_route_name =~s|/|_|g;
 
-        $members->pattern->exclude->{id} ||= [];
-        push @{$members->pattern->exclude->{id}}, $collection_route_name;
+        $!members->pattern->exclude->{id} ||= [];
+        push @{$!members->pattern->exclude->{id}}, $collection_route_name;
 
 
         # Auto set controller and action params and name
@@ -33,7 +33,7 @@ class Plural extends Forward::Routes::Resources {
 
 
     method collection {
-        return $collection ||= $self->add_route;
+        return $!collection ||= $self->add_route;
     }
 
 
@@ -63,9 +63,9 @@ class Plural extends Forward::Routes::Resources {
 
 
     method id_constraint (@params) {
-        return $id_constraint unless @params;
+        return $!id_constraint unless @params;
 
-        $id_constraint = $params[0];
+        $!id_constraint = $params[0];
 
         return $self;
     }
@@ -142,17 +142,17 @@ class Plural extends Forward::Routes::Resources {
 
 
     method members {
-        return $members if $members;
+        return $!members if $!members;
 
-        $id_constraint || die 'missing id constraint';
+        $!id_constraint || die 'missing id constraint';
 
-        $members = $self->add_route(':id')
-          ->constraints('id' => $id_constraint);
+        $!members = $self->add_route(':id')
+          ->constraints('id' => $!id_constraint);
 
-        $members->pattern->exclude->{id} ||= [];
-        push @{$members->pattern->exclude->{id}}, 'new';
+        $!members->pattern->exclude->{id} ||= [];
+        push @{$!members->pattern->exclude->{id}}, 'new';
 
-        return $members;
+        return $!members;
     }
 }
 
