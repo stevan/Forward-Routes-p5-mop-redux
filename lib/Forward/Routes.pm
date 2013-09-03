@@ -5,9 +5,23 @@ use mop;
 
 use Forward::Routes::Match;
 use Forward::Routes::Pattern;
-use Forward::Routes::Resources;
+
+# NOTE:
+# there is some strange issues with
+# timing going on here, these modules
+# cannot be loaded at compile-time
+# and need to be loaded at run-time
+# otherwise the inheritance doesn't
+# work correctly for some reason.
+# - SL
+require Forward::Routes::Resources;
+require Forward::Routes::Resources::Plural;
+require Forward::Routes::Resources::Singular;
+
 use Scalar::Util qw/weaken/;
 use Carp 'croak';
+
+
 
 our $VERSION = '0.54';
 
