@@ -3,24 +3,12 @@ use strict;
 use warnings;
 use mop;
 
+use Forward::Routes::Resources;
 use Forward::Routes::Match;
 use Forward::Routes::Pattern;
 
-# NOTE:
-# there is some strange issues with
-# timing going on here, these modules
-# cannot be loaded at compile-time
-# and need to be loaded at run-time
-# otherwise the inheritance doesn't
-# work correctly for some reason.
-# - SL
-require Forward::Routes::Resources;
-require Forward::Routes::Resources::Plural;
-require Forward::Routes::Resources::Singular;
-
 use Scalar::Util qw/weaken/;
 use Carp 'croak';
-
 
 
 our $VERSION = '0.54';
@@ -816,7 +804,6 @@ class Routes {
         return $self;
     }
 }
-
 
 1;
 __END__
