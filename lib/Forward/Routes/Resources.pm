@@ -3,9 +3,6 @@ use strict;
 use warnings;
 use mop;
 
-use Forward::Routes::Resources::Plural;
-use Forward::Routes::Resources::Singular;
-
 class Resources extends Forward::Routes {
 
     has $!only is ro;

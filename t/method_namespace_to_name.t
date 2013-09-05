@@ -3,6 +3,7 @@ use warnings;
 use Test::More tests => 4;
 use lib 'lib';
 use Forward::Routes;
+use Forward::Routes::Resources;
 
 
 
