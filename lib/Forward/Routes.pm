@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use mop;
 
-use Forward::Routes::Resources;
 use Forward::Routes::Match;
 use Forward::Routes::Pattern;
 
@@ -81,6 +80,7 @@ class Routes {
 
 
     method add_resources {
+        require Forward::Routes::Resources;
         my $params = Forward::Routes::Resources->_prepare_resource_options(@_);
 
         my $last_resource;
@@ -102,6 +102,7 @@ class Routes {
     method _add_plural_resource {
         my ($passed_resource_name, $options) = @_;
 
+        require Forward::Routes::Resources::Plural;
         my $resource = Forward::Routes::Resources::Plural->new->BUILD($passed_resource_name,
             resource_name => $passed_resource_name,
             %$options
@@ -122,6 +123,7 @@ class Routes {
 
 
     method add_singular_resources {
+        require Forward::Routes::Resources;
         my $params = Forward::Routes::Resources->_prepare_resource_options(@_);
 
         my $last_resource;
@@ -141,6 +143,7 @@ class Routes {
 
 
     method _add_singular_resource ($passed_resource_name, $options) {
+        require Forward::Routes::Resources::Singular;
         my $resource = Forward::Routes::Resources::Singular->new->BUILD($passed_resource_name,
             resource_name => $passed_resource_name,
             %$options
