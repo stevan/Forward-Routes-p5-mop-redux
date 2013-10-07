@@ -38,7 +38,7 @@ class Routes {
     has $!_inherit_namespace is ro = 1;
     has $!_inherit_app_namespace is ro = 1;
 
-    method BUILD {
+    method build {
         # block
         my $code_ref = pop @_ if @_ && ref $_[-1] eq 'CODE';
 
@@ -74,7 +74,7 @@ class Routes {
     ## ---------------------------------------------------------------------------
 
     method add_route (@params) {
-        my $child = Forward::Routes->new()->BUILD(@params);
+        my $child = Forward::Routes->new()->build(@params);
         return $self->add_child($child);
     }
 
@@ -103,7 +103,7 @@ class Routes {
         my ($passed_resource_name, $options) = @_;
 
         require Forward::Routes::Resources::Plural;
-        my $resource = Forward::Routes::Resources::Plural->new->BUILD($passed_resource_name,
+        my $resource = Forward::Routes::Resources::Plural->new->build($passed_resource_name,
             resource_name => $passed_resource_name,
             %$options
         );
@@ -144,7 +144,7 @@ class Routes {
 
     method _add_singular_resource ($passed_resource_name, $options) {
         require Forward::Routes::Resources::Singular;
-        my $resource = Forward::Routes::Resources::Singular->new->BUILD($passed_resource_name,
+        my $resource = Forward::Routes::Resources::Singular->new->build($passed_resource_name,
             resource_name => $passed_resource_name,
             %$options
         );

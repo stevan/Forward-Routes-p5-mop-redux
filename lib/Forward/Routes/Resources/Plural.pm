@@ -12,7 +12,7 @@ class Plural extends Forward::Routes::Resources {
 
     method add_collection_route ($pattern, @params) {
 
-        my $child = Forward::Routes->new->BUILD($pattern, @params);
+        my $child = Forward::Routes->new->build($pattern, @params);
         $self->collection->add_child($child);
 
         # name

@@ -15,7 +15,7 @@ class Resources extends Forward::Routes {
         my $members = $self->members;
 
         # makes sure that inheritance works
-        my $child = Forward::Routes->new->BUILD($pattern, @params);
+        my $child = Forward::Routes->new->build($pattern, @params);
         $members->add_child($child);
 
         # name
